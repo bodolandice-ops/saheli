@@ -3,137 +3,218 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QR Quest Mobile</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <title>QR Game Pro</title>
+    
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
     <style>
-        :root { --primary: #00ff88; --bg: #1a1a1a; }
+        :root { --primary: #007bff; --success: #22c55e; --danger: #ef4444; --bg: #f4f7f6; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 500px; margin: auto; }
         
-        body { 
-            margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: var(--bg); color: white; overflow: hidden; touch-action: manipulation;
+        /* Cards & UI */
+        .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        h2, h3 { margin-top: 0; }
+        .hidden { display: none; }
+
+        /* Scanning List */
+        .qr-item { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 12px; border-bottom: 1px solid #eee; font-size: 14px;
         }
+        .qr-item:last-child { border-bottom: none; }
 
-        /* Full-screen Camera Container */
-        #container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+        /* Form Inputs */
+        input { width: 100%; padding: 14px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
 
-        #video { width: 100%; height: 100%; object-fit: cover; }
+        /* Buttons */
+        .btn { border: none; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; padding: 16px; font-size: 16px; transition: 0.2s; }
+        .btn-add { background: var(--primary); color: white; margin-bottom: 15px; }
+        .btn-update { background: var(--success); color: white; }
+        .btn-pdf { background: #111; color: white; margin-top: 10px; }
+        .btn-delete { background: #ffebee; color: var(--danger); padding: 6px 10px; font-size: 12px; border-radius: 6px; width: auto; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* UI Overlays */
-        .overlay {
-            position: absolute; left: 0; right: 0; z-index: 10;
-            background: rgba(0,0,0,0.6); padding: 15px; text-align: center;
+        /* Scanner Modal */
+        #scanner-modal { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: black; z-index: 2000; flex-direction: column;
         }
-        
-        .top-bar { top: 0; border-bottom: 1px solid var(--primary); }
-        .bottom-bar { bottom: 0; padding-bottom: 30px; border-top: 1px solid var(--primary); }
-
-        input {
-            width: 80%; padding: 12px; border-radius: 8px; border: none;
-            margin-bottom: 10px; font-size: 16px; /* Prevents iOS zoom on focus */
-        }
-
-        /* Scanner Target Box */
-        #target {
-            position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            width: 250px; height: 250px;
-            border: 2px solid var(--primary);
-            box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
-            border-radius: 20px;
-            pointer-events: none;
-            z-index: 5;
-        }
-
-        .scanning-line {
-            width: 100%; height: 2px; background: var(--primary);
-            position: absolute; top: 0; animation: scan 2s infinite linear;
-        }
-
-        @keyframes scan {
-            0% { top: 0; }
-            100% { top: 100%; }
-        }
-
-        #status { font-weight: bold; color: var(--primary); margin-top: 10px; }
+        #reader { width: 100%; flex-grow: 1; }
+        .scanner-footer { background: white; padding: 20px; text-align: center; }
     </style>
 </head>
 <body>
 
-<div id="container">
-    <div class="overlay top-bar">
-        <input type="text" id="playerName" placeholder="Enter Nickname...">
+<div class="container">
+    
+    <div id="phase-scan">
+        <h2>QR 🚀</h2>
+        <button class="btn btn-add" onclick="openScanner()">+ Scan New QR Code</button>
+        
+        <div class="card">
+            <h3>Scanned Items (<span id="count">0</span>)</h3>
+            <div id="list-container">
+                <p style="color: #999; text-align: center;">No items scanned yet.</p>
+            </div>
+            <button class="btn btn-update" id="finish-btn" style="margin-top: 20px;" onclick="uploadToSheet()">Finish & Save</button>
+        </div>
     </div>
 
-    <div id="target"><div class="scanning-line"></div></div>
-    
-    <video id="video"></video>
-    <canvas id="canvas" hidden></canvas>
+    <div id="phase-finish" class="hidden">
+        <div class="card">
+            <h2 style="color: var(--success);">Sync Complete!</h2>
+            <p>Enter details to generate your points receipt.</p>
+            <input type="text" id="userName" placeholder="Your Full Name">
+            <input type="tel" id="userPhone" placeholder="Phone Number">
+            <button class="btn btn-pdf" onclick="generateReceiptPDF()">Download PDF Receipt</button>
+            <button class="btn" style="background: none; color: #666;" onclick="location.reload()">Start New Session</button>
+        </div>
+    </div>
 
-    <div class="overlay bottom-bar">
-        <div id="status">Align QR Code inside the square</div>
+</div>
+
+<div id="scanner-modal">
+    <div id="reader"></div>
+    <div class="scanner-footer">
+        <button class="btn" style="background: #eee;" onclick="closeScanner()">Close Camera</button>
     </div>
 </div>
 
 <script>
-    const video = document.getElementById("video");
-    const canvas = document.body.appendChild(document.createElement("canvas"));
-    const ctx = canvas.getContext("2d");
-    const status = document.getElementById("status");
-    const SCRIPT_URL = "YOUR_GOOGLE_APPS_SCRIPT_URL_HERE";
+    // --- CONFIGURATION ---
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxdaTziv4f5kXNRIE9AsKcmQM49bLa0dPOTCATcoF6VvIVjz2WXxfU0dClOHmqZMDKuCw/exec"; 
+    let scannedItems = [];
+    let html5QrCode;
 
-    let lastScannedCode = "";
-    let isProcessing = false;
-
-    // Mobile Camera Setup
-    navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment", focusMode: "continuous" } 
-    }).then(stream => {
-        video.srcObject = stream;
-        video.setAttribute("playsinline", true);
-        video.play();
-        requestAnimationFrame(tick);
-    });
-
-    function tick() {
-        if (video.readyState === video.HAVE_ENOUGH_DATA && !isProcessing) {
-            canvas.height = video.videoHeight;
-            canvas.width = video.videoWidth;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
-
-            if (code && code.data !== lastScannedCode) {
-                lastScannedCode = code.data;
-                handleMatch(code.data);
-            }
+    // --- SCANNER FUNCTIONS ---
+    async function openScanner() {
+        document.getElementById('scanner-modal').style.display = 'flex';
+        html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        
+        try {
+            await html5QrCode.start({ facingMode: "environment" }, config, (text) => {
+                scannedItems.push(text);
+                if (navigator.vibrate) navigator.vibrate(50);
+                closeScanner();
+                updateUI();
+            });
+        } catch (err) {
+            alert("Camera Access Denied");
+            closeScanner();
         }
-        requestAnimationFrame(tick);
     }
 
-    async function handleMatch(data) {
-        isProcessing = true;
-        const name = document.getElementById("playerName").value || "Player 1";
-        status.innerText = "🚀 TRANSMITTING DATA...";
+    async function closeScanner() {
+        if (html5QrCode && html5QrCode.isScanning) {
+            await html5QrCode.stop();
+        }
+        document.getElementById('scanner-modal').style.display = 'none';
+    }
+
+    function updateUI() {
+        const listDiv = document.getElementById('list-container');
+        document.getElementById('count').innerText = scannedItems.length;
         
-        // Haptic Feedback (Vibrate phone)
-        if (navigator.vibrate) navigator.vibrate(200);
+        if (scannedItems.length === 0) {
+            listDiv.innerHTML = '<p style="color: #999; text-align: center;">No items scanned yet.</p>';
+            return;
+        }
+
+        listDiv.innerHTML = scannedItems.map((item, i) => `
+            <div class="qr-item">
+                <span style="max-width: 70%; overflow: hidden;">${item}</span>
+                <button class="btn btn-delete" onclick="removeItem(${i})">Delete</button>
+            </div>
+        `).join('');
+    }
+
+    function removeItem(index) {
+        scannedItems.splice(index, 1);
+        updateUI();
+    }
+
+    // --- DATA HANDLING ---
+    async function uploadToSheet() {
+        if (scannedItems.length === 0) return alert("Please scan at least one code.");
+        
+        const btn = document.getElementById('finish-btn');
+        btn.disabled = true;
+        btn.innerText = "Syncing with Cloud...";
 
         try {
             await fetch(SCRIPT_URL, {
                 method: "POST",
-                mode: 'no-cors', // Essential for Google Apps Script 
-                body: JSON.stringify({ qrData: data, playerName: name })
+                mode: "no-cors", // Standard for Apps Script Web Apps
+                body: JSON.stringify({ 
+                    items: scannedItems,
+                    playerName: "System_User", // Will update after PDF screen
+                    phone: "System_User"
+                })
             });
-            status.innerText = "✅ RECORDED: " + data;
+            
+            // Switch Screens
+            document.getElementById('phase-scan').classList.add('hidden');
+            document.getElementById('phase-finish').classList.remove('hidden');
         } catch (e) {
-            status.innerText = "❌ Sync Failed";
+            alert("Connection Error. Try again.");
+            btn.disabled = false;
+            btn.innerText = "Finish & Save";
         }
+    }
 
-        // Wait 3 seconds before allowing next scan to prevent duplicates
-        setTimeout(() => { 
-            isProcessing = false; 
-            status.innerText = "Ready for next scan...";
-        }, 3000);
+    // --- PDF GENERATION ---
+    function generateReceiptPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const name = document.getElementById('userName').value || "Valued Player";
+        const phone = document.getElementById('userPhone').value || "N/A";
+        const points = scannedItems.length * 10;
+
+        // Branding
+        doc.setFillColor(0, 123, 255);
+        doc.rect(0, 0, 210, 40, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(24);
+        doc.text("GAME RECEIPT", 20, 25);
+
+        // Player Info Box
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(12);
+        doc.text(`Player Name: ${name}`, 20, 55);
+        doc.text(`Phone Number: ${phone}`, 20, 65);
+        doc.text(`Date Issued: ${new Date().toLocaleDateString()}`, 20, 75);
+
+        // Score
+        doc.setDrawColor(34, 197, 94);
+        doc.setLineWidth(1);
+        doc.rect(140, 50, 50, 25);
+        doc.text("TOTAL SCORE", 145, 58);
+        doc.setFontSize(18);
+        doc.setTextColor(34, 197, 94);
+        doc.text(`${points} PTS`, 145, 68);
+
+        // Items Table
+        doc.setTextColor(0,0,0);
+        doc.setFontSize(12);
+        doc.line(20, 85, 190, 85);
+        doc.text("No.", 20, 92);
+        doc.text("Scanned Content", 40, 92);
+        doc.text("Points", 170, 92);
+        doc.line(20, 95, 190, 95);
+
+        let y = 105;
+        scannedItems.forEach((item, i) => {
+            doc.setFontSize(10);
+            doc.text(`${i+1}`, 20, y);
+            doc.text(`${item.substring(0, 45)}`, 40, y);
+            doc.text("10", 175, y);
+            y += 10;
+        });
+
+        doc.save(`Receipt_${name}.pdf`);
     }
 </script>
 
