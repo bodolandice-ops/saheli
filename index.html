@@ -10,12 +10,11 @@
 
     <style>
         :root { --primary: #007bff; --success: #22c55e; --danger: #ef4444; --bg: #f4f7f6; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #333; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #333; transition: background 0.2s; }
         .container { max-width: 500px; margin: auto; }
         
-        /* Cards & UI */
         .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 20px; }
-        h2, h3 { margin-top: 0; }
+        h2, h3 { margin-top: 0; color: #1a1a1a; }
         .hidden { display: none; }
 
         /* Scanning List */
@@ -23,10 +22,11 @@
             display: flex; justify-content: space-between; align-items: center; 
             padding: 12px; border-bottom: 1px solid #eee; font-size: 14px;
         }
-        .qr-item:last-child { border-bottom: none; }
+        .qr-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
 
         /* Form Inputs */
-        input { width: 100%; padding: 14px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+        input { width: 100%; padding: 14px; margin: 8px 0; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; outline: none; }
+        input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,123,255,0.1); }
 
         /* Buttons */
         .btn { border: none; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; padding: 16px; font-size: 16px; transition: 0.2s; }
@@ -50,7 +50,14 @@
 <div class="container">
     
     <div id="phase-scan">
-        <h2>QR 🚀</h2>
+        <h2>QR Game 🚀</h2>
+        
+        <div class="card">
+            <h3>Player Info</h3>
+            <input type="text" id="userName" placeholder="Full Name" required>
+            <input type="tel" id="userPhone" placeholder="Phone Number" required>
+        </div>
+
         <button class="btn btn-add" onclick="openScanner()">+ Scan New QR Code</button>
         
         <div class="card">
@@ -58,18 +65,20 @@
             <div id="list-container">
                 <p style="color: #999; text-align: center;">No items scanned yet.</p>
             </div>
-            <button class="btn btn-update" id="finish-btn" style="margin-top: 20px;" onclick="uploadToSheet()">Finish & Save</button>
+            <button class="btn btn-update" id="finish-btn" style="margin-top: 20px;" onclick="uploadToSheet()">Finish & Save Data</button>
         </div>
     </div>
 
     <div id="phase-finish" class="hidden">
-        <div class="card">
-            <h2 style="color: var(--success);">Sync Complete!</h2>
-            <p>Enter details to generate your points receipt.</p>
-            <input type="text" id="userName" placeholder="Your Full Name">
-            <input type="tel" id="userPhone" placeholder="Phone Number">
+        <div class="card" style="text-align: center;">
+            <h2 style="color: var(--success);">Done! ✅</h2>
+            <p>Your score has been recorded in our database.</p>
+            <div style="background: #f8fafc; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
+                <p style="margin: 0; font-size: 14px; color: #64748b;">Total Points Earned</p>
+                <h1 id="final-points-display" style="margin: 5px 0; color: var(--success);">0</h1>
+            </div>
             <button class="btn btn-pdf" onclick="generateReceiptPDF()">Download PDF Receipt</button>
-            <button class="btn" style="background: none; color: #666;" onclick="location.reload()">Start New Session</button>
+            <button class="btn" style="background: none; color: #666; margin-top: 10px;" onclick="location.reload()">Start New Session</button>
         </div>
     </div>
 
@@ -78,31 +87,39 @@
 <div id="scanner-modal">
     <div id="reader"></div>
     <div class="scanner-footer">
-        <button class="btn" style="background: #eee;" onclick="closeScanner()">Close Camera</button>
+        <button class="btn" style="background: #eee;" onclick="closeScanner()">Cancel</button>
     </div>
 </div>
 
 <script>
-    // --- CONFIGURATION ---
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxdaTziv4f5kXNRIE9AsKcmQM49bLa0dPOTCATcoF6VvIVjz2WXxfU0dClOHmqZMDKuCw/exec"; 
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby03JDZmbrpHQpTiIcrKHxuPljqpbXWEq3gqNbI5Rb2_UlaSJ748rO7_dIgWCYCyFgddA/exec"; 
     let scannedItems = [];
     let html5QrCode;
 
-    // --- SCANNER FUNCTIONS ---
+    // --- SCANNER LOGIC ---
     async function openScanner() {
         document.getElementById('scanner-modal').style.display = 'flex';
         html5QrCode = new Html5Qrcode("reader");
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        const config = { fps: 15, qrbox: { width: 250, height: 250 } };
         
         try {
             await html5QrCode.start({ facingMode: "environment" }, config, (text) => {
+                if (scannedItems.includes(text)) {
+                    alert("Code already scanned!");
+                    return;
+                }
                 scannedItems.push(text);
-                if (navigator.vibrate) navigator.vibrate(50);
+                
+                // Visual & Audio Feedback
+                if (navigator.vibrate) navigator.vibrate(70);
+                document.body.style.background = "#dcfce7";
+                setTimeout(() => document.body.style.background = "#f4f7f6", 200);
+
                 closeScanner();
                 updateUI();
             });
         } catch (err) {
-            alert("Camera Access Denied");
+            alert("Camera Error: Please check permissions.");
             closeScanner();
         }
     }
@@ -125,8 +142,8 @@
 
         listDiv.innerHTML = scannedItems.map((item, i) => `
             <div class="qr-item">
-                <span style="max-width: 70%; overflow: hidden;">${item}</span>
-                <button class="btn btn-delete" onclick="removeItem(${i})">Delete</button>
+                <span>${item}</span>
+                <button class="btn btn-delete" onclick="removeItem(${i})">Remove</button>
             </div>
         `).join('');
     }
@@ -138,30 +155,39 @@
 
     // --- DATA HANDLING ---
     async function uploadToSheet() {
-        if (scannedItems.length === 0) return alert("Please scan at least one code.");
+        const name = document.getElementById('userName').value.trim();
+        const phone = document.getElementById('userPhone').value.trim();
+
+        if (!name || !phone) return alert("Please fill in your Name and Phone Number.");
+        if (scannedItems.length === 0) return alert("Scan at least one item first.");
         
         const btn = document.getElementById('finish-btn');
         btn.disabled = true;
-        btn.innerText = "Syncing with Cloud...";
+        btn.innerText = "Syncing...";
 
         try {
+            const data = {
+                name: name,
+                phone: phone,
+                items: scannedItems.join(", "),
+                points: scannedItems.length * 10,
+                timestamp: new Date().toLocaleString()
+            };
+
             await fetch(SCRIPT_URL, {
                 method: "POST",
-                mode: "no-cors", // Standard for Apps Script Web Apps
-                body: JSON.stringify({ 
-                    items: scannedItems,
-                    playerName: "System_User", // Will update after PDF screen
-                    phone: "System_User"
-                })
+                mode: "no-cors", 
+                body: JSON.stringify(data)
             });
             
-            // Switch Screens
+            // Show Success Screen
+            document.getElementById('final-points-display').innerText = data.points;
             document.getElementById('phase-scan').classList.add('hidden');
             document.getElementById('phase-finish').classList.remove('hidden');
         } catch (e) {
-            alert("Connection Error. Try again.");
+            alert("Sync Failed. Please check connection.");
             btn.disabled = false;
-            btn.innerText = "Finish & Save";
+            btn.innerText = "Finish & Save Data";
         }
     }
 
@@ -169,52 +195,50 @@
     function generateReceiptPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
-        const name = document.getElementById('userName').value || "Valued Player";
-        const phone = document.getElementById('userPhone').value || "N/A";
+        const name = document.getElementById('userName').value;
+        const phone = document.getElementById('userPhone').value;
         const points = scannedItems.length * 10;
 
-        // Branding
+        // Visual Layout
         doc.setFillColor(0, 123, 255);
-        doc.rect(0, 0, 210, 40, 'F');
+        doc.rect(0, 0, 210, 45, 'F');
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(24);
-        doc.text("GAME RECEIPT", 20, 25);
+        doc.setFontSize(26);
+        doc.text("PLAYER RECEIPT", 20, 30);
 
-        // Player Info Box
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(12);
-        doc.text(`Player Name: ${name}`, 20, 55);
-        doc.text(`Phone Number: ${phone}`, 20, 65);
-        doc.text(`Date Issued: ${new Date().toLocaleDateString()}`, 20, 75);
+        doc.text(`Player: ${name}`, 20, 60);
+        doc.text(`Phone: ${phone}`, 20, 70);
+        doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 80);
 
-        // Score
+        // Score Box
         doc.setDrawColor(34, 197, 94);
         doc.setLineWidth(1);
-        doc.rect(140, 50, 50, 25);
-        doc.text("TOTAL SCORE", 145, 58);
-        doc.setFontSize(18);
+        doc.rect(140, 55, 50, 25);
+        doc.text("TOTAL SCORE", 145, 62);
+        doc.setFontSize(22);
         doc.setTextColor(34, 197, 94);
-        doc.text(`${points} PTS`, 145, 68);
+        doc.text(`${points}`, 145, 75);
 
-        // Items Table
+        // Table
         doc.setTextColor(0,0,0);
-        doc.setFontSize(12);
-        doc.line(20, 85, 190, 85);
-        doc.text("No.", 20, 92);
-        doc.text("Scanned Content", 40, 92);
-        doc.text("Points", 170, 92);
-        doc.line(20, 95, 190, 95);
+        doc.setFontSize(10);
+        doc.line(20, 90, 190, 90);
+        doc.text("ID", 20, 95);
+        doc.text("Code Content", 40, 95);
+        doc.text("Pts", 175, 95);
+        doc.line(20, 98, 190, 98);
 
         let y = 105;
         scannedItems.forEach((item, i) => {
-            doc.setFontSize(10);
             doc.text(`${i+1}`, 20, y);
             doc.text(`${item.substring(0, 45)}`, 40, y);
             doc.text("10", 175, y);
-            y += 10;
+            y += 8;
         });
 
-        doc.save(`Receipt_${name}.pdf`);
+        doc.save(`Score_${name.replace(/\s+/g, '_')}.pdf`);
     }
 </script>
 
