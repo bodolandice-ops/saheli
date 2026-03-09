@@ -17,12 +17,23 @@
         h2, h3 { margin-top: 0; color: #1a1a1a; }
         .hidden { display: none; }
 
-        /* Scanning List */
+        /* Scanning List - Enhanced for Visibility */
         .qr-item { 
-            display: flex; justify-content: space-between; align-items: center; 
-            padding: 12px; border-bottom: 1px solid #eee; font-size: 14px;
+            display: flex; 
+            justify-content: space-between; 
+            align-items: flex-start; 
+            padding: 12px; 
+            border-bottom: 1px solid #eee; 
+            font-size: 14px;
+            gap: 10px;
         }
-        .qr-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+        .qr-item span { 
+            word-break: break-all; /* Ensures long QR data wraps */
+            white-space: normal; 
+            overflow: visible;
+            flex-grow: 1;
+            line-height: 1.4;
+        }
 
         /* Form Inputs */
         input { width: 100%; padding: 14px; margin: 8px 0; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; outline: none; }
@@ -33,7 +44,7 @@
         .btn-add { background: var(--primary); color: white; margin-bottom: 15px; }
         .btn-update { background: var(--success); color: white; }
         .btn-pdf { background: #111; color: white; margin-top: 10px; }
-        .btn-delete { background: #ffebee; color: var(--danger); padding: 6px 10px; font-size: 12px; border-radius: 6px; width: auto; }
+        .btn-delete { background: #ffebee; color: var(--danger); padding: 8px 12px; font-size: 12px; border-radius: 6px; width: auto; flex-shrink: 0; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
         /* Scanner Modal */
@@ -43,12 +54,16 @@
         }
         #reader { width: 100%; flex-grow: 1; }
         .scanner-footer { background: white; padding: 20px; text-align: center; }
+        .scan-feedback { 
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(34, 197, 94, 0.9); color: white; padding: 10px 20px;
+            border-radius: 20px; font-weight: bold; display: none; z-index: 2001;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    
     <div id="phase-scan">
         <h2>QR Game 🚀</h2>
         
@@ -58,7 +73,7 @@
             <input type="tel" id="userPhone" placeholder="Phone Number" required>
         </div>
 
-        <button class="btn btn-add" onclick="openScanner()">+ Scan New QR Code</button>
+        <button class="btn btn-add" onclick="openScanner()">+ Start Scanning</button>
         
         <div class="card">
             <h3>Scanned Items (<span id="count">0</span>)</h3>
@@ -81,42 +96,47 @@
             <button class="btn" style="background: none; color: #666; margin-top: 10px;" onclick="location.reload()">Start New Session</button>
         </div>
     </div>
-
 </div>
 
 <div id="scanner-modal">
+    <div id="scan-feedback" class="scan-feedback">Code Captured!</div>
     <div id="reader"></div>
     <div class="scanner-footer">
-        <button class="btn" style="background: #eee;" onclick="closeScanner()">Cancel</button>
+        <p style="margin-bottom: 10px; color: #666;">Scanning active... Aim at any QR code.</p>
+        <button class="btn" style="background: #eee;" onclick="closeScanner()">Done Scanning</button>
     </div>
 </div>
 
 <script>
+    // Replace with your actual Google Apps Script URL
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby03JDZmbrpHQpTiIcrKHxuPljqpbXWEq3gqNbI5Rb2_UlaSJ748rO7_dIgWCYCyFgddA/exec"; 
     let scannedItems = [];
     let html5QrCode;
+    let isProcessingScan = false;
 
     // --- SCANNER LOGIC ---
     async function openScanner() {
         document.getElementById('scanner-modal').style.display = 'flex';
         html5QrCode = new Html5Qrcode("reader");
-        const config = { fps: 15, qrbox: { width: 250, height: 250 } };
+        const config = { fps: 20, qrbox: { width: 250, height: 250 } };
         
         try {
             await html5QrCode.start({ facingMode: "environment" }, config, (text) => {
-                if (scannedItems.includes(text)) {
-                    alert("Code already scanned!");
-                    return;
-                }
+                // Prevent multiple triggers for the same physical scan in a split second
+                if (isProcessingScan) return;
+                isProcessingScan = true;
+
+                // Add to list (Duplicates allowed)
                 scannedItems.push(text);
                 
                 // Visual & Audio Feedback
+                showScanFeedback();
                 if (navigator.vibrate) navigator.vibrate(70);
-                document.body.style.background = "#dcfce7";
-                setTimeout(() => document.body.style.background = "#f4f7f6", 200);
-
-                closeScanner();
+                
                 updateUI();
+
+                // Reset processing lock after short delay to allow next scan
+                setTimeout(() => { isProcessingScan = false; }, 1500);
             });
         } catch (err) {
             alert("Camera Error: Please check permissions.");
@@ -124,9 +144,16 @@
         }
     }
 
+    function showScanFeedback() {
+        const fb = document.getElementById('scan-feedback');
+        fb.style.display = 'block';
+        setTimeout(() => { fb.style.display = 'none'; }, 1000);
+    }
+
     async function closeScanner() {
         if (html5QrCode && html5QrCode.isScanning) {
             await html5QrCode.stop();
+            await html5QrCode.clear();
         }
         document.getElementById('scanner-modal').style.display = 'none';
     }
@@ -142,14 +169,16 @@
 
         listDiv.innerHTML = scannedItems.map((item, i) => `
             <div class="qr-item">
-                <span>${item}</span>
+                <span><strong>#${i+1}</strong><br>${item}</span>
                 <button class="btn btn-delete" onclick="removeItem(${i})">Remove</button>
             </div>
-        `).join('');
+        `).reverse().join(''); // Reverse so newest is on top
     }
 
     function removeItem(index) {
-        scannedItems.splice(index, 1);
+        // Correcting index for reversed array display
+        const actualIndex = (scannedItems.length - 1) - index;
+        scannedItems.splice(actualIndex, 1);
         updateUI();
     }
 
@@ -163,13 +192,13 @@
         
         const btn = document.getElementById('finish-btn');
         btn.disabled = true;
-        btn.innerText = "Syncing...";
+        btn.innerText = "Syncing Data...";
 
         try {
             const data = {
                 name: name,
                 phone: phone,
-                items: scannedItems.join(", "),
+                items: scannedItems.join(" | "),
                 points: scannedItems.length * 10,
                 timestamp: new Date().toLocaleString()
             };
@@ -180,7 +209,6 @@
                 body: JSON.stringify(data)
             });
             
-            // Show Success Screen
             document.getElementById('final-points-display').innerText = data.points;
             document.getElementById('phase-scan').classList.add('hidden');
             document.getElementById('phase-finish').classList.remove('hidden');
@@ -199,7 +227,6 @@
         const phone = document.getElementById('userPhone').value;
         const points = scannedItems.length * 10;
 
-        // Visual Layout
         doc.setFillColor(0, 123, 255);
         doc.rect(0, 0, 210, 45, 'F');
         doc.setTextColor(255, 255, 255);
@@ -212,16 +239,13 @@
         doc.text(`Phone: ${phone}`, 20, 70);
         doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 80);
 
-        // Score Box
         doc.setDrawColor(34, 197, 94);
-        doc.setLineWidth(1);
         doc.rect(140, 55, 50, 25);
         doc.text("TOTAL SCORE", 145, 62);
         doc.setFontSize(22);
         doc.setTextColor(34, 197, 94);
         doc.text(`${points}`, 145, 75);
 
-        // Table
         doc.setTextColor(0,0,0);
         doc.setFontSize(10);
         doc.line(20, 90, 190, 90);
@@ -232,10 +256,13 @@
 
         let y = 105;
         scannedItems.forEach((item, i) => {
+            if (y > 280) { doc.addPage(); y = 20; }
             doc.text(`${i+1}`, 20, y);
-            doc.text(`${item.substring(0, 45)}`, 40, y);
+            // Multi-line text support for PDF
+            const splitText = doc.splitTextToSize(item, 130);
+            doc.text(splitText, 40, y);
             doc.text("10", 175, y);
-            y += 8;
+            y += (splitText.length * 5) + 2;
         });
 
         doc.save(`Score_${name.replace(/\s+/g, '_')}.pdf`);
