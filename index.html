@@ -3,55 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QR Game Pro</title>
+    <title>QR Scanner Pro</title>
     
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <style>
         :root { --primary: #007bff; --success: #22c55e; --danger: #ef4444; --bg: #f4f7f6; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #333; transition: background 0.2s; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 20px; color: #333; }
         .container { max-width: 500px; margin: auto; }
-        
         .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); margin-bottom: 20px; }
         h2, h3 { margin-top: 0; color: #1a1a1a; }
         .hidden { display: none; }
 
-        /* Scanning List - Enhanced for Visibility */
+        /* List Styling */
         .qr-item { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: flex-start; 
-            padding: 12px; 
-            border-bottom: 1px solid #eee; 
-            font-size: 14px;
-            gap: 10px;
+            display: flex; justify-content: space-between; align-items: flex-start; 
+            padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; gap: 10px;
         }
-        .qr-item span { 
-            word-break: break-all; /* Ensures long QR data wraps */
-            white-space: normal; 
-            overflow: visible;
-            flex-grow: 1;
-            line-height: 1.4;
-        }
+        .qr-item span { word-break: break-all; white-space: normal; flex-grow: 1; line-height: 1.4; }
+        .price-tag { color: var(--success); font-weight: bold; min-width: 70px; text-align: right; }
 
-        /* Form Inputs */
+        /* Inputs & Buttons */
         input { width: 100%; padding: 14px; margin: 8px 0; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; outline: none; }
-        input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,123,255,0.1); }
-
-        /* Buttons */
         .btn { border: none; border-radius: 12px; font-weight: bold; cursor: pointer; width: 100%; padding: 16px; font-size: 16px; transition: 0.2s; }
         .btn-add { background: var(--primary); color: white; margin-bottom: 15px; }
         .btn-update { background: var(--success); color: white; }
         .btn-pdf { background: #111; color: white; margin-top: 10px; }
-        .btn-delete { background: #ffebee; color: var(--danger); padding: 8px 12px; font-size: 12px; border-radius: 6px; width: auto; flex-shrink: 0; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-delete { background: #ffebee; color: var(--danger); padding: 8px 12px; font-size: 12px; border-radius: 6px; width: auto; }
 
-        /* Scanner Modal */
-        #scanner-modal { 
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: black; z-index: 2000; flex-direction: column;
-        }
+        /* Scanner */
+        #scanner-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 2000; flex-direction: column; }
         #reader { width: 100%; flex-grow: 1; }
         .scanner-footer { background: white; padding: 20px; text-align: center; }
         .scan-feedback { 
@@ -65,32 +47,30 @@
 
 <div class="container">
     <div id="phase-scan">
-        <h2>QR Game 🚀</h2>
-        
+        <h2>QR Inventory 🚀</h2>
         <div class="card">
-            <h3>Player Info</h3>
-            <input type="text" id="userName" placeholder="Full Name" required>
-            <input type="tel" id="userPhone" placeholder="Phone Number" required>
+            <h3>User Details</h3>
+            <input type="text" id="userName" placeholder="Full Name">
+            <input type="tel" id="userPhone" placeholder="Phone Number">
         </div>
 
-        <button class="btn btn-add" onclick="openScanner()">+ Start Scanning</button>
+        <button class="btn btn-add" onclick="openScanner()">+ Start Continuous Scan</button>
         
         <div class="card">
             <h3>Scanned Items (<span id="count">0</span>)</h3>
             <div id="list-container">
-                <p style="color: #999; text-align: center;">No items scanned yet.</p>
+                <p style="color: #999; text-align: center;">Ready to scan.</p>
             </div>
-            <button class="btn btn-update" id="finish-btn" style="margin-top: 20px;" onclick="uploadToSheet()">Finish & Save Data</button>
+            <button class="btn btn-update" id="finish-btn" style="margin-top: 20px;" onclick="uploadToSheet()">Sync to Sheet & Finish</button>
         </div>
     </div>
 
     <div id="phase-finish" class="hidden">
         <div class="card" style="text-align: center;">
-            <h2 style="color: var(--success);">Done! ✅</h2>
-            <p>Your score has been recorded in our database.</p>
+            <h2 style="color: var(--success);">Data Synced! ✅</h2>
             <div style="background: #f8fafc; padding: 15px; border-radius: 10px; margin-bottom: 15px;">
-                <p style="margin: 0; font-size: 14px; color: #64748b;">Total Points Earned</p>
-                <h1 id="final-points-display" style="margin: 5px 0; color: var(--success);">0</h1>
+                <p style="margin: 0; font-size: 14px; color: #64748b;">Total Bill Amount</p>
+                <h1 id="final-price-display" style="margin: 5px 0; color: var(--success);">$0.00</h1>
             </div>
             <button class="btn btn-pdf" onclick="generateReceiptPDF()">Download PDF Receipt</button>
             <button class="btn" style="background: none; color: #666; margin-top: 10px;" onclick="location.reload()">Start New Session</button>
@@ -99,173 +79,161 @@
 </div>
 
 <div id="scanner-modal">
-    <div id="scan-feedback" class="scan-feedback">Code Captured!</div>
+    <div id="scan-feedback" class="scan-feedback">Item Captured!</div>
     <div id="reader"></div>
     <div class="scanner-footer">
-        <p style="margin-bottom: 10px; color: #666;">Scanning active... Aim at any QR code.</p>
-        <button class="btn" style="background: #eee;" onclick="closeScanner()">Done Scanning</button>
+        <button class="btn" style="background: #eee;" onclick="closeScanner()">Stop Scanning</button>
     </div>
 </div>
 
 <script>
-    // Replace with your actual Google Apps Script URL
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby03JDZmbrpHQpTiIcrKHxuPljqpbXWEq3gqNbI5Rb2_UlaSJ748rO7_dIgWCYCyFgddA/exec"; 
+    // PUT YOUR DEPLOYED URL HERE
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzuh6d-oO5bgJveBdGcHTqreAsh8rBrZC6arwTc-Tn4cZtJb7qjltbv5yPBiW4HR2Qf4Q/exec"; 
+    
     let scannedItems = [];
     let html5QrCode;
-    let isProcessingScan = false;
+    let isProcessing = false;
 
-    // --- SCANNER LOGIC ---
+    // Helper: Finds price in QR text
+    function extractPrice(text) {
+        const regex = /(\d+(\.\d{1,2})?)/; 
+        const match = text.match(regex);
+        return match ? parseFloat(match[0]) : 0.00;
+    }
+
     async function openScanner() {
         document.getElementById('scanner-modal').style.display = 'flex';
         html5QrCode = new Html5Qrcode("reader");
-        const config = { fps: 20, qrbox: { width: 250, height: 250 } };
-        
         try {
-            await html5QrCode.start({ facingMode: "environment" }, config, (text) => {
-                // Prevent multiple triggers for the same physical scan in a split second
-                if (isProcessingScan) return;
-                isProcessingScan = true;
+            await html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, (text) => {
+                if (isProcessing) return;
+                isProcessing = true;
 
-                // Add to list (Duplicates allowed)
-                scannedItems.push(text);
+                const price = extractPrice(text);
+                scannedItems.push({ content: text, price: price });
                 
-                // Visual & Audio Feedback
-                showScanFeedback();
+                showFeedback();
                 if (navigator.vibrate) navigator.vibrate(70);
-                
                 updateUI();
-
-                // Reset processing lock after short delay to allow next scan
-                setTimeout(() => { isProcessingScan = false; }, 1500);
+                setTimeout(() => { isProcessing = false; }, 1200);
             });
-        } catch (err) {
-            alert("Camera Error: Please check permissions.");
-            closeScanner();
-        }
+        } catch (err) { alert("Camera Error"); closeScanner(); }
     }
 
-    function showScanFeedback() {
+    function showFeedback() {
         const fb = document.getElementById('scan-feedback');
         fb.style.display = 'block';
-        setTimeout(() => { fb.style.display = 'none'; }, 1000);
+        setTimeout(() => { fb.style.display = 'none'; }, 800);
     }
 
     async function closeScanner() {
-        if (html5QrCode && html5QrCode.isScanning) {
-            await html5QrCode.stop();
-            await html5QrCode.clear();
-        }
+        if (html5QrCode && html5QrCode.isScanning) { await html5QrCode.stop(); await html5QrCode.clear(); }
         document.getElementById('scanner-modal').style.display = 'none';
     }
 
     function updateUI() {
         const listDiv = document.getElementById('list-container');
         document.getElementById('count').innerText = scannedItems.length;
-        
-        if (scannedItems.length === 0) {
-            listDiv.innerHTML = '<p style="color: #999; text-align: center;">No items scanned yet.</p>';
-            return;
-        }
+        if (scannedItems.length === 0) return;
 
         listDiv.innerHTML = scannedItems.map((item, i) => `
             <div class="qr-item">
-                <span><strong>#${i+1}</strong><br>${item}</span>
+                <span><strong>#${i+1}</strong> ${item.content}</span>
+                <span class="price-tag">$${item.price.toFixed(2)}</span>
                 <button class="btn btn-delete" onclick="removeItem(${i})">Remove</button>
             </div>
-        `).reverse().join(''); // Reverse so newest is on top
+        `).reverse().join('');
     }
 
     function removeItem(index) {
-        // Correcting index for reversed array display
         const actualIndex = (scannedItems.length - 1) - index;
         scannedItems.splice(actualIndex, 1);
         updateUI();
     }
 
-    // --- DATA HANDLING ---
     async function uploadToSheet() {
         const name = document.getElementById('userName').value.trim();
         const phone = document.getElementById('userPhone').value.trim();
 
-        if (!name || !phone) return alert("Please fill in your Name and Phone Number.");
-        if (scannedItems.length === 0) return alert("Scan at least one item first.");
+        if (!name || scannedItems.length === 0) return alert("Please provide Name and scan items.");
         
         const btn = document.getElementById('finish-btn');
         btn.disabled = true;
-        btn.innerText = "Syncing Data...";
+        btn.innerText = "Uploading Rows...";
+
+        const total = scannedItems.reduce((sum, item) => sum + item.price, 0);
 
         try {
-            const data = {
-                name: name,
-                phone: phone,
-                items: scannedItems.join(" | "),
-                points: scannedItems.length * 10,
-                timestamp: new Date().toLocaleString()
-            };
-
+            // Sending the actual array so Google Script can loop through it
             await fetch(SCRIPT_URL, {
                 method: "POST",
-                mode: "no-cors", 
-                body: JSON.stringify(data)
+                mode: "no-cors",
+                body: JSON.stringify({
+                    name: name,
+                    phone: phone,
+                    items: scannedItems
+                })
             });
-            
-            document.getElementById('final-points-display').innerText = data.points;
+
+            document.getElementById('final-price-display').innerText = `$${total.toFixed(2)}`;
             document.getElementById('phase-scan').classList.add('hidden');
             document.getElementById('phase-finish').classList.remove('hidden');
         } catch (e) {
-            alert("Sync Failed. Please check connection.");
+            alert("Upload Failed. Check Connection.");
             btn.disabled = false;
-            btn.innerText = "Finish & Save Data";
         }
     }
 
-    // --- PDF GENERATION ---
     function generateReceiptPDF() {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         const name = document.getElementById('userName').value;
-        const phone = document.getElementById('userPhone').value;
-        const points = scannedItems.length * 10;
+        const total = scannedItems.reduce((sum, item) => sum + item.price, 0);
 
-        doc.setFillColor(0, 123, 255);
-        doc.rect(0, 0, 210, 45, 'F');
+        // Styling
+        doc.setFillColor(40, 44, 52);
+        doc.rect(0, 0, 210, 40, 'F');
         doc.setTextColor(255, 255, 255);
-        doc.setFontSize(26);
-        doc.text("PLAYER RECEIPT", 20, 30);
+        doc.setFontSize(22);
+        doc.text("OFFICIAL RECEIPT", 20, 25);
 
         doc.setTextColor(0, 0, 0);
-        doc.setFontSize(12);
-        doc.text(`Player: ${name}`, 20, 60);
-        doc.text(`Phone: ${phone}`, 20, 70);
-        doc.text(`Date: ${new Date().toLocaleDateString()}`, 20, 80);
-
-        doc.setDrawColor(34, 197, 94);
-        doc.rect(140, 55, 50, 25);
-        doc.text("TOTAL SCORE", 145, 62);
-        doc.setFontSize(22);
-        doc.setTextColor(34, 197, 94);
-        doc.text(`${points}`, 145, 75);
-
-        doc.setTextColor(0,0,0);
         doc.setFontSize(10);
-        doc.line(20, 90, 190, 90);
-        doc.text("ID", 20, 95);
-        doc.text("Code Content", 40, 95);
-        doc.text("Pts", 175, 95);
-        doc.line(20, 98, 190, 98);
+        doc.text(`Customer Name: ${name}`, 20, 50);
+        doc.text(`Date/Time: ${new Date().toLocaleString()}`, 20, 56);
 
-        let y = 105;
+        // Table Header
+        doc.line(20, 65, 190, 65);
+        doc.setFont(undefined, 'bold');
+        doc.text("SN", 20, 70);
+        doc.text("Description (QR Data)", 40, 70);
+        doc.text("Price", 175, 70, { align: 'right' });
+        doc.setFont(undefined, 'normal');
+        doc.line(20, 73, 190, 73);
+
+        let y = 82;
         scannedItems.forEach((item, i) => {
-            if (y > 280) { doc.addPage(); y = 20; }
+            if (y > 275) { doc.addPage(); y = 20; }
+            
             doc.text(`${i+1}`, 20, y);
-            // Multi-line text support for PDF
-            const splitText = doc.splitTextToSize(item, 130);
-            doc.text(splitText, 40, y);
-            doc.text("10", 175, y);
-            y += (splitText.length * 5) + 2;
+            const splitContent = doc.splitTextToSize(item.content, 120);
+            doc.text(splitContent, 40, y);
+            doc.text(`$${item.price.toFixed(2)}`, 175, y, { align: 'right' });
+            
+            y += (splitContent.length * 6) + 4;
+            doc.setDrawColor(240);
+            doc.line(20, y-2, 190, y-2);
         });
 
-        doc.save(`Score_${name.replace(/\s+/g, '_')}.pdf`);
+        // Summary
+        y += 10;
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text("GRAND TOTAL:", 120, y);
+        doc.setTextColor(34, 197, 94);
+        doc.text(`$${total.toFixed(2)}`, 175, y, { align: 'right' });
+
+        doc.save(`Receipt_${name.replace(/\s+/g, '_')}.pdf`);
     }
 </script>
 
