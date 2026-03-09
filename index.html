@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QR Rupee Scanner Pro</title>
+    <title>High-Speed Rupee QR Scanner</title>
     
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -17,7 +17,7 @@
         h2, h3 { margin-top: 0; color: #1a1a1a; }
         .hidden { display: none; }
 
-        /* List Styling */
+        /* List Styling - Fully Visible Data */
         .qr-item { 
             display: flex; justify-content: space-between; align-items: flex-start; 
             padding: 12px; border-bottom: 1px solid #eee; font-size: 14px; gap: 10px;
@@ -33,7 +33,7 @@
         .btn-pdf { background: #111; color: white; margin-top: 10px; }
         .btn-delete { background: #ffebee; color: var(--danger); padding: 8px 12px; font-size: 11px; border-radius: 6px; width: auto; border: 1px solid #fecaca; }
 
-        /* Scanner */
+        /* High-Speed Scanner Overlay */
         #scanner-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 2000; flex-direction: column; }
         #reader { width: 100%; flex-grow: 1; }
         .scanner-footer { background: white; padding: 20px; text-align: center; }
@@ -55,7 +55,7 @@
             <input type="tel" id="userPhone" placeholder="Customer Phone">
         </div>
 
-        <button class="btn btn-add" onclick="openScanner()">+ Open Continuous Scanner</button>
+        <button class="btn btn-add" onclick="openScanner()">+ Start High-Speed Scanning</button>
         
         <div class="card">
             <h3>Cart Items (<span id="count">0</span>)</h3>
@@ -83,17 +83,22 @@
     <div id="scan-feedback" class="scan-feedback">Item Scanned!</div>
     <div id="reader"></div>
     <div class="scanner-footer">
-        <button class="btn" style="background: #eee;" onclick="closeScanner()">Finish Scanning</button>
+        <p style="font-size: 12px; color: #666; margin-bottom: 10px;">Hold steady for small codes</p>
+        <button class="btn" style="background: #eee;" onclick="closeScanner()">Close Scanner</button>
     </div>
 </div>
 
 <script>
+    // Replace this with your actual Google Script Web App URL
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycby03JDZmbrpHQpTiIcrKHxuPljqpbXWEq3gqNbI5Rb2_UlaSJ748rO7_dIgWCYCyFgddA/exec"; 
     
     let scannedItems = [];
     let html5QrCode;
     let isProcessing = false;
 
+    /**
+     * Extracts the very last number found in the QR string.
+     */
     function extractPrice(text) {
         const numbers = text.match(/\d+(\.\d{1,2})?/g); 
         if (numbers && numbers.length > 0) {
@@ -102,35 +107,27 @@
         return 0.00;
     }
 
-   async function openScanner() {
+    async function openScanner() {
         document.getElementById('scanner-modal').style.display = 'flex';
         
-        // Initialize with enhanced camera settings
+        // Settings optimized for small printed QR codes
         html5QrCode = new Html5Qrcode("reader", { 
-            verbose: false,
-            // Requesting higher resolution for better detection of small codes
-            videoConstraints: {
+            videoConstraints: { 
                 facingMode: "environment",
-                width: { min: 640, ideal: 1280 },
-                height: { min: 480, ideal: 720 },
-                aspectRatio: 1.777777778
+                width: { ideal: 1280 }, // HD Resolution
+                height: { ideal: 720 }
             }
         });
 
         const config = { 
-            fps: 30, // Higher FPS for faster detection
+            fps: 30, // Higher frequency
             qrbox: function(viewfinderWidth, viewfinderHeight) {
-                // Adaptive box: 70% of the screen width for easier targeting
                 let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-                let qrboxSize = Math.floor(minEdgeSize * 0.7);
-                return {
-                    width: qrboxSize,
-                    height: qrboxSize
-                };
-            },
-            aspectRatio: 1.0 // Square scan area
+                let qrboxSize = Math.floor(minEdgeSize * 0.7); // 70% of screen
+                return { width: qrboxSize, height: qrboxSize };
+            }
         };
-        
+
         try {
             await html5QrCode.start({ facingMode: "environment" }, config, (text) => {
                 if (isProcessing) return;
@@ -143,12 +140,11 @@
                 if (navigator.vibrate) navigator.vibrate(70);
                 updateUI();
                 
-                // Keep the interval short for fast continuous scanning
+                // Pause for 1 second before allowing next scan
                 setTimeout(() => { isProcessing = false; }, 1000);
             });
         } catch (err) { 
-            console.error(err);
-            alert("Camera Error: Please ensure you are using HTTPS and have granted permissions."); 
+            alert("Camera access denied. Ensure you are using HTTPS."); 
             closeScanner(); 
         }
     }
@@ -187,19 +183,29 @@
     async function uploadToSheet() {
         const name = document.getElementById('userName').value.trim();
         const phone = document.getElementById('userPhone').value.trim();
-        if (!name || scannedItems.length === 0) return alert("Missing Info");
+
+        if (!name || scannedItems.length === 0) return alert("Enter Customer Name and scan items.");
         
+        const btn = document.getElementById('finish-btn');
+        btn.disabled = true;
+        btn.innerText = "Syncing with Sheets...";
+
         const total = scannedItems.reduce((sum, item) => sum + item.price, 0);
+
         try {
             await fetch(SCRIPT_URL, {
                 method: "POST",
                 mode: "no-cors",
                 body: JSON.stringify({ name, phone, items: scannedItems })
             });
+
             document.getElementById('final-price-display').innerText = `₹${total.toFixed(2)}`;
             document.getElementById('phase-scan').classList.add('hidden');
             document.getElementById('phase-finish').classList.remove('hidden');
-        } catch (e) { alert("Sync Error"); }
+        } catch (e) {
+            alert("Upload Error. Please check connection.");
+            btn.disabled = false;
+        }
     }
 
     function generateReceiptPDF() {
@@ -215,13 +221,14 @@
         doc.setFontSize(24);
         doc.text("SALES RECEIPT", 20, 28);
 
-        // Info
+        // Details
         doc.setTextColor(0, 0, 0);
         doc.setFontSize(10);
         doc.text(`CUSTOMER: ${name.toUpperCase()}`, 20, 50);
         doc.text(`DATE: ${new Date().toLocaleString()}`, 20, 56);
 
-        // Table Header
+        // Table Headers
+        doc.setLineWidth(0.5);
         doc.line(20, 65, 190, 65);
         doc.setFont(undefined, 'bold');
         doc.text("QTY", 20, 70);
@@ -242,7 +249,7 @@
             doc.line(20, y-2, 190, y-2);
         });
 
-        // FIXED OVERLAP SUMMARY SECTION
+        // FIXED SUMMARY BOX (NO OVERLAP)
         y += 15;
         if (y > 280) { doc.addPage(); y = 30; }
 
@@ -258,10 +265,9 @@
         doc.setTextColor(22, 163, 74); 
         doc.text(`${total.toFixed(2)}`, 190, y + 2, { align: 'right' });
 
-        doc.save(`Receipt_${name}.pdf`);
+        doc.save(`Receipt_${name.replace(/\s+/g, '_')}.pdf`);
     }
 </script>
 
 </body>
 </html>
-
