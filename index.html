@@ -41,11 +41,11 @@
             <input type="tel" id="userPhone" placeholder="Customer Phone">
         </div>
 
-        <button class="btn btn-add" onclick="openScanner()">+ Start High-Speed Scan</button>
+        <button id="scan-trigger-btn" class="btn btn-add" onclick="openScanner()">📷 Scan Next Item</button>
         
         <div class="card">
             <h3>Cart Items (<span id="count">0</span>)</h3>
-            <div id="list-container"><p style="color: #999; text-align: center;">Scan a QR code to begin.</p></div>
+            <div id="list-container"><p style="color: #999; text-align: center;">Ready to scan.</p></div>
             <button class="btn btn-update" id="finish-btn" style="margin-top: 20px;" onclick="uploadToSheet()">Sync to Sheet & Finish</button>
         </div>
     </div>
@@ -66,14 +66,15 @@
 <div id="scanner-modal">
     <div id="scan-feedback" class="scan-feedback">Captured!</div>
     <div id="reader"></div>
-    <div class="scanner-footer"><button class="btn" style="background: #eee;" onclick="closeScanner()">Close Scanner</button></div>
+    <div class="scanner-footer">
+        <button class="btn" style="background: #eee;" onclick="closeScanner()">Close Scanner</button>
+    </div>
 </div>
 
 <script>
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz42psPqfUC3ZfCyZXNuA7Y3jsk_b-ZMgVoe2HdHByos4udQqL2ZuRNcf6Arw91_dW31w/exec"; 
     let scannedItems = [];
     let html5QrCode;
-    let isProcessing = false;
 
     function extractPrice(text) {
         const numbers = text.match(/\d+(\.\d{1,2})?/g); 
@@ -82,21 +83,53 @@
     }
 
     async function openScanner() {
+        const triggerBtn = document.getElementById('scan-trigger-btn');
+        triggerBtn.disabled = true;
+        triggerBtn.innerText = "Starting Camera...";
+        
         document.getElementById('scanner-modal').style.display = 'flex';
-        html5QrCode = new Html5Qrcode("reader", { videoConstraints: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } });
-        const config = { fps: 30, qrbox: (w, h) => { let s = Math.floor(Math.min(w, h) * 0.7); return { width: s, height: s }; } };
+        html5QrCode = new Html5Qrcode("reader");
+        
+        const config = { 
+            fps: 20, 
+            qrbox: (w, h) => { 
+                let s = Math.floor(Math.min(w, h) * 0.7); 
+                return { width: s, height: s }; 
+            } 
+        };
+
         try {
-            await html5QrCode.start({ facingMode: "environment" }, config, (text) => {
-                if (isProcessing) return;
-                isProcessing = true;
+            await html5QrCode.start({ facingMode: "environment" }, config, async (text) => {
+                // Success: Add item
                 const price = extractPrice(text);
                 scannedItems.push({ content: text, price: price });
-                showFeedback();
+                
                 if (navigator.vibrate) navigator.vibrate(70);
+                
+                // CRITICAL: Stop and Close immediately for "One scan at one time"
+                await stopAndClose();
+                
                 updateUI();
-                setTimeout(() => { isProcessing = false; }, 1000);
+                showFeedback();
             });
-        } catch (err) { alert("Camera Error"); closeScanner(); }
+            triggerBtn.innerText = "Camera Active...";
+        } catch (err) {
+            alert("Camera Error: Please ensure permissions are granted.");
+            closeScanner();
+        }
+    }
+
+    async function stopAndClose() {
+        if (html5QrCode && html5QrCode.isScanning) {
+            try {
+                await html5QrCode.stop();
+                await html5QrCode.clear();
+            } catch (e) { console.warn(e); }
+        }
+        document.getElementById('scanner-modal').style.display = 'none';
+        const triggerBtn = document.getElementById('scan-trigger-btn');
+        triggerBtn.disabled = false;
+        triggerBtn.innerText = "📷 Scan Next Item";
     }
 
     function showFeedback() {
@@ -106,33 +139,38 @@
     }
 
     async function closeScanner() {
-        if (html5QrCode && html5QrCode.isScanning) { await html5QrCode.stop(); await html5QrCode.clear(); }
-        document.getElementById('scanner-modal').style.display = 'none';
+        await stopAndClose();
     }
 
     function updateUI() {
         const listDiv = document.getElementById('list-container');
         document.getElementById('count').innerText = scannedItems.length;
-        if (scannedItems.length === 0) return;
-        listDiv.innerHTML = scannedItems.map((item, i) => `
-            <div class="qr-item">
-                <span><strong>Item ${i+1}:</strong><br>${item.content}</span>
-                <span class="price-tag">₹${item.price.toFixed(2)}</span>
-                <button class="btn btn-delete" onclick="removeItem(${i})">X</button>
-            </div>
-        `).reverse().join('');
+        if (scannedItems.length === 0) {
+            listDiv.innerHTML = '<p style="color: #999; text-align: center;">Ready to scan.</p>';
+            return;
+        }
+        // Map maintains standard index, display is reversed for user convenience
+        listDiv.innerHTML = scannedItems.slice().reverse().map((item, i) => {
+            const actualIndex = scannedItems.length - 1 - i;
+            return `
+                <div class="qr-item">
+                    <span><strong>Item ${actualIndex + 1}:</strong><br>${item.content}</span>
+                    <span class="price-tag">₹${item.price.toFixed(2)}</span>
+                    <button class="btn btn-delete" onclick="removeItem(${actualIndex})">X</button>
+                </div>
+            `;
+        }).join('');
     }
 
     function removeItem(index) {
-        const actualIndex = (scannedItems.length - 1) - index;
-        scannedItems.splice(actualIndex, 1);
+        scannedItems.splice(index, 1);
         updateUI();
     }
 
     async function uploadToSheet() {
         const name = document.getElementById('userName').value.trim();
         const phone = document.getElementById('userPhone').value.trim();
-        if (!name || scannedItems.length === 0) return alert("Missing Info");
+        if (!name || scannedItems.length === 0) return alert("Missing Info or Cart is Empty");
         
         const btn = document.getElementById('finish-btn');
         btn.disabled = true;
@@ -148,7 +186,11 @@
             document.getElementById('final-price-display').innerText = `₹${total.toFixed(2)}`;
             document.getElementById('phase-scan').classList.add('hidden');
             document.getElementById('phase-finish').classList.remove('hidden');
-        } catch (e) { alert("Error!"); btn.disabled = false; }
+        } catch (e) { 
+            alert("Sync Error! Check your internet."); 
+            btn.disabled = false; 
+            btn.innerText = "Sync to Sheet & Finish";
+        }
     }
 
     function generateReceiptPDF() {
@@ -188,4 +230,3 @@
 
 </body>
 </html>
-
